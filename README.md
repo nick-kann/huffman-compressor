@@ -2,13 +2,13 @@
 
 simple file compressor using huffman coding
 
-## build
+## Build
 
 ```bash
 make
 ```
 
-## usage
+## Usage
 
 compress a file:
 ```bash
@@ -26,6 +26,6 @@ or use long flags:
 ./huffman --decompress output.huf restored.txt
 ```
 
-## how it works
+## What it does
 
-counts character frequencies, builds a huffman tree, and assigns shorter codes to more common characters. works on any file type.
+counts character frequencies, builds a huffman tree, and assigns shorter codes to more common characters. works on any file type
