@@ -6,9 +6,10 @@
 #include <unordered_map>
 #include <vector>
 #include <bitset>
+#include <memory>
 
 struct Compare {
-    bool operator()(Node* a, Node* b) {
+    bool operator()(const std::unique_ptr<Node>& a, const std::unique_ptr<Node>& b) {
         return a->freq > b->freq;
     }
 };
@@ -32,29 +33,29 @@ void compress(const std::string& inputFile, const std::string& outputFile) {
         return;
     }
     
-    std::priority_queue<Node*, std::vector<Node*>, Compare> pq;
+    std::priority_queue<std::unique_ptr<Node>, std::vector<std::unique_ptr<Node>>, Compare> pq;
     for (auto& pair : freq) {
-        pq.push(new Node(pair.first, pair.second));
+        pq.push(std::make_unique<Node>(pair.first, pair.second));
     }
     
     while (pq.size() > 1) {
-        Node* left = pq.top();
+        auto left = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
         pq.pop();
-        Node* right = pq.top();
+        auto right = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
         pq.pop();
         
-        Node* merged = new Node(left->freq + right->freq, left, right);
-        pq.push(merged);
+        auto merged = std::make_unique<Node>(left->freq + right->freq, std::move(left), std::move(right));
+        pq.push(std::move(merged));
     }
     
-    Node* root = pq.top();
+    auto root = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
     std::unordered_map<char, std::string> codes;
-    buildCodes(root, "", codes);
+    buildCodes(root.get(), "", codes);
     
     in.open(inputFile, std::ios::binary);
     std::ofstream out(outputFile, std::ios::binary);
     
-    serializeTree(root, out);
+    serializeTree(root.get(), out);
     
     std::string bitString;
     while (in.get(ch)) {
@@ -74,7 +75,6 @@ void compress(const std::string& inputFile, const std::string& outputFile) {
         out.put(bits.to_ulong());
     }
     
-    deleteTree(root);
     in.close();
     out.close();
     
@@ -88,7 +88,7 @@ void decompress(const std::string& inputFile, const std::string& outputFile) {
         return;
     }
     
-    Node* root = deserializeTree(in);
+    auto root = deserializeTree(in);
     
     int padding = in.get();
     
@@ -103,22 +103,21 @@ void decompress(const std::string& inputFile, const std::string& outputFile) {
     }
     
     std::ofstream out(outputFile, std::ios::binary);
-    Node* current = root;
+    Node* current = root.get();
     
     for (char bit : bitString) {
         if (bit == '0') {
-            current = current->left;
+            current = current->left.get();
         } else {
-            current = current->right;
+            current = current->right.get();
         }
         
         if (!current->left && !current->right) {
             out.put(current->ch);
-            current = root;
+            current = root.get();
         }
     }
     
-    deleteTree(root);
     in.close();
     out.close();
     

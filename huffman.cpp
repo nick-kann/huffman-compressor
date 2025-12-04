@@ -2,7 +2,7 @@
 #include <iostream>
 
 Node::Node(char c, int f) : ch(c), freq(f), left(nullptr), right(nullptr) {}
-Node::Node(int f, Node* l, Node* r) : ch(0), freq(f), left(l), right(r) {}
+Node::Node(int f, std::unique_ptr<Node> l, std::unique_ptr<Node> r) : ch(0), freq(f), left(std::move(l)), right(std::move(r)) {}
 
 void buildCodes(Node* root, std::string code, std::unordered_map<char, std::string>& codes) {
     if (!root) return;
@@ -16,8 +16,8 @@ void buildCodes(Node* root, std::string code, std::unordered_map<char, std::stri
         return;
     }
     
-    buildCodes(root->left, code + "0", codes);
-    buildCodes(root->right, code + "1", codes);
+    buildCodes(root->left.get(), code + "0", codes);
+    buildCodes(root->right.get(), code + "1", codes);
 }
 
 void serializeTree(Node* root, std::ofstream& out) {
@@ -28,27 +28,20 @@ void serializeTree(Node* root, std::ofstream& out) {
         out.put(root->ch);
     } else {
         out.put('0');
-        serializeTree(root->left, out);
-        serializeTree(root->right, out);
+        serializeTree(root->left.get(), out);
+        serializeTree(root->right.get(), out);
     }
 }
 
-Node* deserializeTree(std::ifstream& in) {
+std::unique_ptr<Node> deserializeTree(std::ifstream& in) {
     char bit = in.get();
     if (bit == '1') {
         char ch = in.get();
-        return new Node(ch, 0);
+        return std::make_unique<Node>(ch, 0);
     } else {
-        Node* left = deserializeTree(in);
-        Node* right = deserializeTree(in);
-        return new Node(0, left, right);
+        auto left = deserializeTree(in);
+        auto right = deserializeTree(in);
+        return std::make_unique<Node>(0, std::move(left), std::move(right));
     }
-}
-
-void deleteTree(Node* root) {
-    if (!root) return;
-    deleteTree(root->left);
-    deleteTree(root->right);
-    delete root;
 }
 
