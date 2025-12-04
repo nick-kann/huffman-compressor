@@ -99,14 +99,22 @@ void compress(const std::string& inputFile, const std::string& outputFile) {
         return;
     }
     
-    std::unordered_map<char, int> freq;
-    char ch;
-    while (in.get(ch)) {
-        freq[ch]++;
+    int freq[256] = {0};
+    int byte;
+    while ((byte = in.get()) != EOF) {
+        freq[static_cast<unsigned char>(byte)]++;
     }
     in.close();
     
-    if (freq.empty()) {
+    bool hasData = false;
+    for (int i = 0; i < 256; i++) {
+        if (freq[i] > 0) {
+            hasData = true;
+            break;
+        }
+    }
+    
+    if (!hasData) {
         std::cerr << "empty file" << std::endl;
         return;
     }
@@ -114,9 +122,11 @@ void compress(const std::string& inputFile, const std::string& outputFile) {
     std::vector<std::unique_ptr<Node>> nodes;
     std::priority_queue<Node*, std::vector<Node*>, Compare> pq;
     
-    for (auto& pair : freq) {
-        nodes.push_back(std::make_unique<Node>(pair.first, pair.second));
-        pq.push(nodes.back().get());
+    for (int i = 0; i < 256; i++) {
+        if (freq[i] > 0) {
+            nodes.push_back(std::make_unique<Node>(static_cast<char>(i), freq[i]));
+            pq.push(nodes.back().get());
+        }
     }
     
     while (pq.size() > 1) {
@@ -165,8 +175,8 @@ void compress(const std::string& inputFile, const std::string& outputFile) {
     
     BitWriter bitWriter(out);
     
-    while (in.get(ch)) {
-        bitWriter.writeBits(codes[ch]);
+    while ((byte = in.get()) != EOF) {
+        bitWriter.writeBits(codes[static_cast<char>(byte)]);
     }
     
     int padding = bitWriter.getPadding();

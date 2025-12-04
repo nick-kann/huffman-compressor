@@ -40,7 +40,7 @@ tested on a 22.65MB highly compressible text file (repeated patterns):
 - input size: 22,650,000 bytes (~22.65 MB)
 - output size: 14,268,879 bytes (~14.27 MB)
 - ratio: 0.630 (37.0% compression)
-- time: 715 ms
+- time: 664 ms
 
 **decompression:**
 - input size: 14,268,879 bytes (~14.27 MB)
