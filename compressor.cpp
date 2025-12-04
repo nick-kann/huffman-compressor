@@ -53,43 +53,42 @@ public:
 };
 
 class BitReader {
-    std::ifstream& in;
-    unsigned char buffer;
-    int bitCount;
-    int padding;
-    bool hasMore;
-    std::streampos fileEnd;
+    std::vector<unsigned char> data;
+    size_t currentBit;
+    size_t totalBits;
     
 public:
-    BitReader(std::ifstream& i, int pad) : in(i), buffer(0), bitCount(8), padding(pad), hasMore(true) {
-        std::streampos current = in.tellg();
+    BitReader(std::ifstream& in, int padding) {
+        std::streampos startPos = in.tellg();
         in.seekg(0, std::ios::end);
-        fileEnd = in.tellg();
-        in.seekg(current);
-    }
-    
-    bool readBit() {
-        if (bitCount == 8) {
-            if (!in.get(reinterpret_cast<char&>(buffer))) {
-                hasMore = false;
-                return false;
-            }
-            bitCount = 0;
+        std::streampos endPos = in.tellg();
+        in.seekg(startPos);
+        
+        size_t remainingBytes = endPos - startPos;
+        
+        if (remainingBytes == 0) {
+            totalBits = 0;
+            currentBit = 0;
+            return;
         }
         
-        bool bit = (buffer >> (7 - bitCount)) & 1;
-        bitCount++;
-        return bit;
+        data.resize(remainingBytes);
+        in.read(reinterpret_cast<char*>(data.data()), remainingBytes);
+        
+        currentBit = 0;
+        totalBits = data.size() * 8 - padding;
     }
     
-    bool isEof() {
-        if (!hasMore) return true;
-        
-        std::streampos current = in.tellg();
-        if (current >= fileEnd) {
-            return bitCount >= (8 - padding);
-        }
-        return false;
+    inline bool readBit() {
+        size_t byteIdx = currentBit >> 3;
+        unsigned char byte = data[byteIdx];
+        int bitPos = 7 - (currentBit & 7);
+        currentBit++;
+        return (byte >> bitPos) & 1;
+    }
+    
+    inline bool isEof() {
+        return currentBit >= totalBits;
     }
 };
 
@@ -197,6 +196,10 @@ void decompress(const std::string& inputFile, const std::string& outputFile) {
     std::ofstream out(outputFile, std::ios::binary);
     Node* current = root.get();
     
+    const size_t bufferSize = 65536;
+    char buffer[bufferSize];
+    size_t bufferPos = 0;
+    
     while (!bitReader.isEof()) {
         bool bit = bitReader.readBit();
         
@@ -207,9 +210,19 @@ void decompress(const std::string& inputFile, const std::string& outputFile) {
         }
         
         if (!current->left && !current->right) {
-            out.put(current->ch);
+            buffer[bufferPos++] = current->ch;
+            
+            if (bufferPos >= bufferSize) {
+                out.write(buffer, bufferSize);
+                bufferPos = 0;
+            }
+            
             current = root.get();
         }
+    }
+    
+    if (bufferPos > 0) {
+        out.write(buffer, bufferPos);
     }
     
     in.close();
