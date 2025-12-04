@@ -9,8 +9,87 @@
 #include <memory>
 
 struct Compare {
-    bool operator()(const std::unique_ptr<Node>& a, const std::unique_ptr<Node>& b) {
+    bool operator()(Node* a, Node* b) {
         return a->freq > b->freq;
+    }
+};
+
+class BitWriter {
+    std::ofstream& out;
+    unsigned char buffer;
+    int bitCount;
+    
+public:
+    BitWriter(std::ofstream& o) : out(o), buffer(0), bitCount(0) {}
+    
+    void writeBit(bool bit) {
+        buffer |= (bit << (7 - bitCount));
+        bitCount++;
+        
+        if (bitCount == 8) {
+            out.put(buffer);
+            buffer = 0;
+            bitCount = 0;
+        }
+    }
+    
+    void writeBits(const std::string& bits) {
+        for (char bit : bits) {
+            writeBit(bit == '1');
+        }
+    }
+    
+    void flush() {
+        if (bitCount > 0) {
+            out.put(buffer);
+            buffer = 0;
+            bitCount = 0;
+        }
+    }
+    
+    int getPadding() {
+        return bitCount > 0 ? (8 - bitCount) : 0;
+    }
+};
+
+class BitReader {
+    std::ifstream& in;
+    unsigned char buffer;
+    int bitCount;
+    int padding;
+    bool hasMore;
+    std::streampos fileEnd;
+    
+public:
+    BitReader(std::ifstream& i, int pad) : in(i), buffer(0), bitCount(8), padding(pad), hasMore(true) {
+        std::streampos current = in.tellg();
+        in.seekg(0, std::ios::end);
+        fileEnd = in.tellg();
+        in.seekg(current);
+    }
+    
+    bool readBit() {
+        if (bitCount == 8) {
+            if (!in.get(reinterpret_cast<char&>(buffer))) {
+                hasMore = false;
+                return false;
+            }
+            bitCount = 0;
+        }
+        
+        bool bit = (buffer >> (7 - bitCount)) & 1;
+        bitCount++;
+        return bit;
+    }
+    
+    bool isEof() {
+        if (!hasMore) return true;
+        
+        std::streampos current = in.tellg();
+        if (current >= fileEnd) {
+            return bitCount >= (8 - padding);
+        }
+        return false;
     }
 };
 
@@ -33,22 +112,47 @@ void compress(const std::string& inputFile, const std::string& outputFile) {
         return;
     }
     
-    std::priority_queue<std::unique_ptr<Node>, std::vector<std::unique_ptr<Node>>, Compare> pq;
+    std::vector<std::unique_ptr<Node>> nodes;
+    std::priority_queue<Node*, std::vector<Node*>, Compare> pq;
+    
     for (auto& pair : freq) {
-        pq.push(std::make_unique<Node>(pair.first, pair.second));
+        nodes.push_back(std::make_unique<Node>(pair.first, pair.second));
+        pq.push(nodes.back().get());
     }
     
     while (pq.size() > 1) {
-        auto left = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
+        Node* leftPtr = pq.top();
+        int leftFreq = leftPtr->freq;
         pq.pop();
-        auto right = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
+        Node* rightPtr = pq.top();
+        int rightFreq = rightPtr->freq;
         pq.pop();
         
-        auto merged = std::make_unique<Node>(left->freq + right->freq, std::move(left), std::move(right));
-        pq.push(std::move(merged));
+        std::unique_ptr<Node> left;
+        std::unique_ptr<Node> right;
+        
+        for (auto it = nodes.begin(); it != nodes.end(); ++it) {
+            if (it->get() == leftPtr) {
+                left = std::move(*it);
+                nodes.erase(it);
+                break;
+            }
+        }
+        
+        for (auto it = nodes.begin(); it != nodes.end(); ++it) {
+            if (it->get() == rightPtr) {
+                right = std::move(*it);
+                nodes.erase(it);
+                break;
+            }
+        }
+        
+        nodes.push_back(std::make_unique<Node>(leftFreq + rightFreq, 
+            std::move(left), std::move(right)));
+        pq.push(nodes.back().get());
     }
     
-    auto root = std::move(const_cast<std::unique_ptr<Node>&>(pq.top()));
+    std::unique_ptr<Node> root = std::move(nodes.back());
     std::unordered_map<char, std::string> codes;
     buildCodes(root.get(), "", codes);
     
@@ -57,23 +161,20 @@ void compress(const std::string& inputFile, const std::string& outputFile) {
     
     serializeTree(root.get(), out);
     
-    std::string bitString;
+    std::streampos paddingPos = out.tellp();
+    out.put(0);
+    
+    BitWriter bitWriter(out);
+    
     while (in.get(ch)) {
-        bitString += codes[ch];
+        bitWriter.writeBits(codes[ch]);
     }
     
-    int padding = 8 - (bitString.length() % 8);
-    if (padding != 8) {
-        bitString += std::string(padding, '0');
-        out.put(padding);
-    } else {
-        out.put(0);
-    }
+    int padding = bitWriter.getPadding();
+    bitWriter.flush();
     
-    for (size_t i = 0; i < bitString.length(); i += 8) {
-        std::bitset<8> bits(bitString.substr(i, 8));
-        out.put(bits.to_ulong());
-    }
+    out.seekp(paddingPos);
+    out.put(padding);
     
     in.close();
     out.close();
@@ -92,24 +193,17 @@ void decompress(const std::string& inputFile, const std::string& outputFile) {
     
     int padding = in.get();
     
-    std::string bitString;
-    char byte;
-    while (in.get(byte)) {
-        bitString += std::bitset<8>(byte).to_string();
-    }
-    
-    if (padding > 0) {
-        bitString = bitString.substr(0, bitString.length() - padding);
-    }
-    
+    BitReader bitReader(in, padding);
     std::ofstream out(outputFile, std::ios::binary);
     Node* current = root.get();
     
-    for (char bit : bitString) {
-        if (bit == '0') {
-            current = current->left.get();
-        } else {
+    while (!bitReader.isEof()) {
+        bool bit = bitReader.readBit();
+        
+        if (bit) {
             current = current->right.get();
+        } else {
+            current = current->left.get();
         }
         
         if (!current->left && !current->right) {
