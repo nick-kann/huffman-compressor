@@ -34,18 +34,33 @@ show compression statistics:
 
 ## Benchmarks
 
-tested on a 22.65MB highly compressible text file (repeated patterns):
+**1. Large English Text File (~24 MB)**
+*Repeated sentences ("The quick brown fox...")*
 
-**compression:**
-- input size: 22,650,000 bytes (~22.65 MB)
-- output size: 14,268,879 bytes (~14.27 MB)
-- ratio: 0.630 (37.0% compression)
-- time: 664 ms
+**Compression:**
+- Input size: 24.12 MB
+- Output size: 13.94 MB
+- **Ratio: 0.578 (42.2% reduction)**
+- Time: 587 ms
 
-**decompression:**
-- input size: 14,268,879 bytes (~14.27 MB)
-- output size: 22,650,000 bytes (~22.65 MB)
-- time: 131 ms
+**Decompression:**
+- Input size: 13.94 MB
+- Output size: 24.12 MB
+- Time: 141 ms
+
+**2. Huge CSV Data File (~100 MB)**
+*Repeated structured data (numbers, dates, IDs)*
+
+**Compression:**
+- Input size: 99.65 MB
+- Output size: 48.17 MB
+- **Ratio: 0.483 (51.7% reduction)**
+- Time: 2,785 ms (~2.8 s)
+
+**Decompression:**
+- Input size: 48.17 MB
+- Output size: 99.65 MB
+- Time: 725 ms
 
 ## What it does
 
