@@ -206,9 +206,30 @@ void decompress(const std::string& inputFile, const std::string& outputFile) {
     std::ofstream out(outputFile, std::ios::binary);
     Node* current = root.get();
     
-    const size_t bufferSize = 65536;
+    const size_t bufferSize = 65536; // 64KB, fewer writes
     char buffer[bufferSize];
     size_t bufferPos = 0;
+
+    if (!root->left && !root->right) {
+        while (!bitReader.isEof()) {
+            bitReader.readBit();
+            buffer[bufferPos++] = root->ch;
+            if (bufferPos >= bufferSize) {
+                out.write(buffer, bufferSize);
+                bufferPos = 0;
+            }
+        }
+
+        if (bufferPos > 0) {
+            out.write(buffer, bufferPos);
+        }
+
+        in.close();
+        out.close();
+        
+        std::cout << "decompressed: " << inputFile << " -> " << outputFile << std::endl;
+        return;
+    }
     
     while (!bitReader.isEof()) {
         bool bit = bitReader.readBit();

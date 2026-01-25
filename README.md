@@ -32,6 +32,22 @@ show compression statistics:
 ./huffman -d --stats output.huf restored.txt
 ```
 
+## Testing
+
+empty file:
+```bash
+: > empty.bin
+./huffman -c --stats empty.bin empty.huf
+```
+
+single byte file:
+```bash
+printf 'A' > one.bin
+./huffman -c --stats one.bin one.huf
+./huffman -d --stats one.huf one_out.bin
+cmp -s one.bin one_out.bin && echo "match" || echo "diff"
+```
+
 ## Benchmarks
 
 **1. Large English Text File (~24 MB)**
